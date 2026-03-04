@@ -13,6 +13,7 @@
  */
 
 import type { NormalizedRequirement } from './requirement/types';
+import { parseRequirementsFile } from './requirements-txt-parser';
 
 /**
  * Regular expression to extract extras from a package name.
@@ -119,4 +120,15 @@ export function mergeExtras(
   }
 
   return result.size > 0 ? Array.from(result) : undefined;
+}
+
+/**
+ * Parse a single PEP 508 dependency string into a NormalizedRequirement.
+ *
+ * @param dep - A PEP 508 dependency string (e.g., "flask[async]>=2.0 ; python_version >= '3.8'")
+ * @returns The parsed requirement, or null if parsing fails
+ */
+export function parsePep508(dep: string): NormalizedRequirement | null {
+  const { requirements } = parseRequirementsFile(dep);
+  return requirements[0] ?? null;
 }
