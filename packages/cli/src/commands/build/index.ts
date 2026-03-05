@@ -8,6 +8,7 @@ import { readdirSync, statSync } from 'fs';
 
 import {
   download,
+  FileBlob,
   FileFsRef,
   getDiscontinuedNodeVersions,
   getInstalledPackageVersion,
@@ -102,6 +103,7 @@ import {
 import { help } from '../help';
 import { pullCommandLogic } from '../pull';
 import { buildCommand } from './command';
+import { validatePackageManifest } from '../../util/validate-package-manifest';
 import { mkdir, writeFile } from 'fs/promises';
 
 type BuildResult = BuildResultV2 | BuildResultV3;
@@ -684,6 +686,13 @@ async function doBuild(
     corepackShimDir = await initCorepack({ repoRootPath });
   }
   const diagnostics: Files = {};
+  const packageManifests: Array<{
+    workspace: string;
+    key: string;
+    file: Files[string];
+    service?: Service;
+    builderUse: string;
+  }> = [];
 
   const hasDetectedServices =
     detectedServices !== undefined && detectedServices.length > 0;
@@ -910,7 +919,32 @@ async function doBuild(
             .trace(async () => {
               return await builder.diagnostics?.(buildOptions);
             });
-          Object.assign(diagnostics, builderDiagnostics);
+          if (builderDiagnostics) {
+            const needsPrefix =
+              hasDetectedServices || sortedBuilders.length > 1;
+            const wsPrefix =
+              needsPrefix && service && service.workspace !== '.'
+                ? service.workspace + '/'
+                : '';
+            const builderPrefix = needsPrefix ? builderPkg.name + '/' : '';
+            for (const [key, value] of Object.entries(builderDiagnostics)) {
+              const fullKey = builderPrefix + wsPrefix + key;
+              diagnostics[fullKey] = value;
+              if (key.endsWith('package-manifest.json')) {
+                const workspace =
+                  service && service.workspace !== '.'
+                    ? service.workspace
+                    : '.';
+                packageManifests.push({
+                  workspace,
+                  key: fullKey,
+                  file: value,
+                  service,
+                  builderUse: builderPkg.name,
+                });
+              }
+            }
+          }
         } catch (error) {
           output.error('Collecting diagnostics failed');
           output.debug(error);
@@ -1099,6 +1133,64 @@ async function doBuild(
       }
       throw err;
     } finally {
+      ops.push(
+        download(diagnostics, join(outputDir, 'diagnostics')).then(
+          () => undefined,
+          err => err
+        )
+      );
+    }
+  }
+
+  // Aggregate individual package-manifest.json files from builders into
+  // a single project-manifest.json keyed by service workspace.
+  if (packageManifests.length > 0) {
+    const projectManifest: Record<string, unknown> = {};
+    for (const {
+      workspace,
+      key,
+      file,
+      service,
+      builderUse,
+    } of packageManifests) {
+      try {
+        let data: string;
+        if (file.type === 'FileBlob') {
+          data = (file as unknown as FileBlob).data.toString();
+        } else {
+          data = await streamToString(file.toStream());
+        }
+        const manifest = JSON.parse(data);
+        const validationError = validatePackageManifest(manifest);
+        if (validationError) {
+          output.debug(
+            `Invalid package-manifest.json from ${key}: ${validationError}`
+          );
+        } else {
+          projectManifest[`${builderUse}:${workspace}`] = {
+            ...manifest,
+            workspace,
+            builder: builderUse,
+            framework: service?.framework,
+            serviceName: service?.name,
+            serviceType: service?.type,
+            routePrefix: service?.routePrefix,
+          };
+        }
+      } catch (e) {
+        output.debug(
+          `Failed to parse ${key}: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+      delete diagnostics[key];
+      // Remove the individual file from disk (written by earlier download calls)
+      const filePath = join(outputDir, 'diagnostics', key);
+      fs.remove(filePath).catch(() => {});
+    }
+    if (Object.keys(projectManifest).length > 0) {
+      diagnostics['project-manifest.json'] = new FileBlob({
+        data: JSON.stringify(projectManifest),
+      });
       ops.push(
         download(diagnostics, join(outputDir, 'diagnostics')).then(
           () => undefined,
@@ -1832,4 +1924,12 @@ function appendWorkerTrigger(lambda: Lambda, trigger: TriggerEvent): void {
   if (!alreadyConfigured) {
     lambda.experimentalTriggers = [...existingTriggers, trigger];
   }
+}
+
+async function streamToString(stream: NodeJS.ReadableStream): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf-8');
 }
