@@ -893,6 +893,58 @@ describe('[vercel dev] Multi-service auto-detection', () => {
   });
 });
 
+describe('[vercel dev] Worker service', () => {
+  const resultsDir = join(__dirname, 'fixtures', 'services-worker', '.results');
+
+  beforeEach(async () => {
+    await fs.remove(resultsDir);
+  });
+
+  test('[vercel dev] web send() triggers worker execution', async () => {
+    const dir = fixture('services-worker');
+    const { dev, port, readyResolver } = await testFixture(
+      dir,
+      {
+        skipNpmInstall: true,
+        env: {
+          VERCEL_USE_EXPERIMENTAL_SERVICES: '1',
+          VERCEL_USE_EXPERIMENTAL_FRAMEWORKS: '1',
+        },
+      },
+      ['--local']
+    );
+
+    try {
+      await readyResolver;
+
+      const enqueueRes = await nodeFetch(`http://localhost:${port}/enqueue`, {
+        method: 'POST',
+      });
+      expect(enqueueRes.status).toBe(200);
+      const enqueueJson = await enqueueRes.json();
+      expect(enqueueJson).toHaveProperty('messageId');
+
+      // Poll for the worker side-effect file
+      const workerResultPath = join(resultsDir, 'worker_result.json');
+      let workerResult: any = null;
+      for (let i = 0; i < 30; i++) {
+        await sleep(500);
+        if (await fs.pathExists(workerResultPath)) {
+          workerResult = await fs.readJson(workerResultPath);
+          break;
+        }
+      }
+
+      expect(workerResult).not.toBeNull();
+      expect(workerResult).toHaveProperty('received', true);
+      expect(workerResult.message).toHaveProperty('action', 'test');
+      expect(workerResult.message).toHaveProperty('value', 42);
+    } finally {
+      await dev.kill();
+    }
+  });
+});
+
 describe('[vercel dev] Cron service', () => {
   const resultsDir = join(__dirname, 'fixtures', 'services-cron', '.results');
 
