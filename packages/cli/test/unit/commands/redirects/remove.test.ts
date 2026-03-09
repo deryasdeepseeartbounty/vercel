@@ -176,19 +176,22 @@ describe('redirects remove', () => {
       client.nonInteractive = false;
     });
 
-    it('should remove redirect when non-interactive with --yes', async () => {
+    it('should output JSON only on success when non-interactive with --yes', async () => {
       mockGetVersions();
       mockGetRedirects();
       mockDeleteRedirects();
 
       client.nonInteractive = true;
       client.setArgv('redirects', 'remove', '/old-path', '--yes');
-      const exitCodePromise = redirects(client);
+      const exitCode = await redirects(client);
 
-      await expect(client.stderr).toOutput('Redirect removed');
-      await expect(client.stderr).toOutput('redirects publish');
-
-      await expect(exitCodePromise).resolves.toEqual(0);
+      expect(exitCode).toEqual(0);
+      const out = client.stdout.getFullOutput();
+      const json = JSON.parse(out);
+      expect(json.status).toEqual('ok');
+      expect(json.removed).toEqual({ source: '/old-path' });
+      expect(json.next).toBeDefined();
+      expect(json.next[0].command).toContain('redirects publish');
 
       client.nonInteractive = false;
     });

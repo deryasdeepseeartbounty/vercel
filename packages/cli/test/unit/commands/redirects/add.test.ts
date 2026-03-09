@@ -508,19 +508,27 @@ describe('redirects add', () => {
       client.nonInteractive = false;
     });
 
-    it('should add redirect without prompting when non-interactive with full args', async () => {
+    it('should output JSON only on success when non-interactive with full args', async () => {
       mockGetVersions();
       mockPutRedirects();
 
       client.nonInteractive = true;
       client.setArgv('redirects', 'add', '/old-path', '/new-path', '--yes');
-      const exitCodePromise = redirects(client);
+      const exitCode = await redirects(client);
 
-      await expect(client.stderr).toOutput('Redirect added');
-      await expect(client.stderr).toOutput('/old-path → /new-path');
-      await expect(client.stderr).toOutput('redirects publish');
-
-      await expect(exitCodePromise).resolves.toEqual(0);
+      expect(exitCode).toEqual(0);
+      const out = client.stdout.getFullOutput();
+      const json = JSON.parse(out);
+      expect(json.status).toEqual('ok');
+      expect(json.redirect).toEqual({
+        source: '/old-path',
+        destination: '/new-path',
+        statusCode: 307,
+        caseSensitive: false,
+        preserveQueryParams: false,
+      });
+      expect(json.next).toBeDefined();
+      expect(json.next[0].command).toContain('redirects publish');
 
       client.nonInteractive = false;
     });

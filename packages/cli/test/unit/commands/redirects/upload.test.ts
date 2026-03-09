@@ -429,7 +429,7 @@ describe('redirects upload', () => {
       client.nonInteractive = false;
     });
 
-    it('should upload when non-interactive with --yes', async () => {
+    it('should output JSON only on success when non-interactive with --yes', async () => {
       const csvPath = join(fixtureDir, 'test.csv');
       const csvContent = `source,destination
 /old,/new`;
@@ -439,12 +439,15 @@ describe('redirects upload', () => {
 
       client.nonInteractive = true;
       client.setArgv('redirects', 'upload', csvPath, '--yes');
-      const exitCodePromise = redirects(client);
+      const exitCode = await redirects(client);
 
-      await expect(client.stderr).toOutput('Redirects uploaded');
-      await expect(client.stderr).toOutput('redirects publish');
-
-      await expect(exitCodePromise).resolves.toEqual(0);
+      expect(exitCode).toEqual(0);
+      const out = client.stdout.getFullOutput();
+      const json = JSON.parse(out);
+      expect(json.status).toEqual('ok');
+      expect(json.version).toBeDefined();
+      expect(json.next).toBeDefined();
+      expect(json.next[0].command).toContain('redirects publish');
 
       client.nonInteractive = false;
     });
