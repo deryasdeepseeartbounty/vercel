@@ -410,6 +410,46 @@ describe('redirects upload', () => {
     });
   });
 
+  describe('client.nonInteractive', () => {
+    it('should error when --yes not provided in non-interactive mode', async () => {
+      const csvPath = join(fixtureDir, 'test.csv');
+      const csvContent = `source,destination
+/old,/new`;
+      writeFileSync(csvPath, csvContent);
+
+      client.nonInteractive = true;
+      client.setArgv('redirects', 'upload', csvPath);
+      const exitCodePromise = redirects(client);
+
+      await expect(client.stderr).toOutput(
+        'In non-interactive mode use --yes to confirm upload'
+      );
+      await expect(exitCodePromise).resolves.toEqual(1);
+
+      client.nonInteractive = false;
+    });
+
+    it('should upload when non-interactive with --yes', async () => {
+      const csvPath = join(fixtureDir, 'test.csv');
+      const csvContent = `source,destination
+/old,/new`;
+      writeFileSync(csvPath, csvContent);
+
+      mockPutRedirects({ redirectCount: 1 });
+
+      client.nonInteractive = true;
+      client.setArgv('redirects', 'upload', csvPath, '--yes');
+      const exitCodePromise = redirects(client);
+
+      await expect(client.stderr).toOutput('Redirects uploaded');
+      await expect(client.stderr).toOutput('redirects publish');
+
+      await expect(exitCodePromise).resolves.toEqual(0);
+
+      client.nonInteractive = false;
+    });
+  });
+
   it('tracks subcommand invocation', async () => {
     const csvPath = join(fixtureDir, 'test.csv');
     const csvContent = `source,destination

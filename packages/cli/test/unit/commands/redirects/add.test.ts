@@ -476,6 +476,55 @@ describe('redirects add', () => {
       await expect(exitCodePromise).resolves.toEqual(1);
     });
   });
+
+  describe('client.nonInteractive', () => {
+    it('should error when source or destination missing in non-interactive mode', async () => {
+      mockGetVersions();
+      client.nonInteractive = true;
+
+      client.setArgv('redirects', 'add');
+      const exitCodePromise = redirects(client);
+
+      await expect(client.stderr).toOutput(
+        'In non-interactive mode source and destination are required'
+      );
+      await expect(exitCodePromise).resolves.toEqual(1);
+
+      client.nonInteractive = false;
+    });
+
+    it('should error when only source provided in non-interactive mode', async () => {
+      mockGetVersions();
+      client.nonInteractive = true;
+
+      client.setArgv('redirects', 'add', '/old-path');
+      const exitCodePromise = redirects(client);
+
+      await expect(client.stderr).toOutput(
+        'In non-interactive mode source and destination are required'
+      );
+      await expect(exitCodePromise).resolves.toEqual(1);
+
+      client.nonInteractive = false;
+    });
+
+    it('should add redirect without prompting when non-interactive with full args', async () => {
+      mockGetVersions();
+      mockPutRedirects();
+
+      client.nonInteractive = true;
+      client.setArgv('redirects', 'add', '/old-path', '/new-path', '--yes');
+      const exitCodePromise = redirects(client);
+
+      await expect(client.stderr).toOutput('Redirect added');
+      await expect(client.stderr).toOutput('/old-path → /new-path');
+      await expect(client.stderr).toOutput('redirects publish');
+
+      await expect(exitCodePromise).resolves.toEqual(0);
+
+      client.nonInteractive = false;
+    });
+  });
 });
 
 function mockGetVersions(options?: { hasStaging?: boolean }): void {

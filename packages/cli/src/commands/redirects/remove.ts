@@ -8,6 +8,7 @@ import {
   validateRequiredArgs,
   confirmAction,
 } from './shared';
+import { getCommandName } from '../../util/pkg-name';
 import deleteRedirects from '../../util/redirects/delete-redirects';
 import getRedirects from '../../util/redirects/get-redirects';
 import getRedirectVersions from '../../util/redirects/get-redirect-versions';
@@ -44,6 +45,13 @@ export default async function remove(client: Client, argv: string[]) {
       `Redirect with source "${source}" not found. Run ${chalk.cyan(
         'vercel redirects list'
       )} to see available redirects.`
+    );
+    return 1;
+  }
+
+  if (client.nonInteractive && !parsed.flags['--yes']) {
+    output.error(
+      `In non-interactive mode use --yes to confirm removal. Use: ${getCommandName('redirects remove <source> --yes')}`
     );
     return 1;
   }
@@ -97,7 +105,7 @@ export default async function remove(client: Client, argv: string[]) {
   const versionName = version.name || version.id;
   output.print(`  ${chalk.bold('New staging version:')} ${versionName}\n\n`);
 
-  if (!existingStagingVersion) {
+  if (!existingStagingVersion && !client.nonInteractive) {
     const shouldPromote = await client.input.confirm(
       'This is the only staged change. Do you want to promote it to production now?',
       false
@@ -119,6 +127,10 @@ export default async function remove(client: Client, argv: string[]) {
         `${chalk.cyan('✓')} Version promoted to production ${chalk.gray(promoteStamp())}`
       );
     }
+  } else if (!existingStagingVersion && client.nonInteractive) {
+    output.print(
+      `  Run ${chalk.cyan('vercel redirects publish')} to promote this version to production.\n\n`
+    );
   } else {
     output.warn(
       `There are other staged changes. Review them with ${chalk.cyan('vercel redirects list --staging')} before promoting to production.`
