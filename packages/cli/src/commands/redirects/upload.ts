@@ -183,6 +183,37 @@ export default async function upload(client: Client, argv: string[]) {
       });
     }
 
+    if (client.nonInteractive) {
+      output.stopSpinner();
+      const jsonOutput: Record<string, unknown> = {
+        status: 'ok',
+        version: {
+          id: result.version.id,
+          name: result.version.name || result.version.id,
+          ...(result.version.redirectCount !== undefined && {
+            redirectCount: result.version.redirectCount,
+          }),
+        },
+        ...(result.alias && {
+          alias: result.alias,
+          testUrl: `https://${result.alias}`,
+        }),
+        ...(!existingStagingVersion && {
+          next: [
+            {
+              command: getCommandName('redirects publish'),
+              when: 'To promote this version to production',
+            },
+          ],
+        }),
+        ...(existingStagingVersion && {
+          hint: `Review staged changes with ${getCommandName('redirects list --staging')} before promoting.`,
+        }),
+      };
+      client.stdout.write(`${JSON.stringify(jsonOutput, null, 2)}\n`);
+      return 0;
+    }
+
     output.log(
       `${chalk.cyan('✓')} Redirects uploaded ${chalk.gray(uploadStamp())}`
     );

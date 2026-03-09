@@ -86,6 +86,34 @@ export default async function remove(client: Client, argv: string[]) {
     teamId
   );
 
+  if (client.nonInteractive) {
+    output.stopSpinner();
+    const testUrl = alias
+      ? source.startsWith('/')
+        ? `https://${alias}${source}`
+        : `https://${alias}`
+      : undefined;
+    const jsonOutput: Record<string, unknown> = {
+      status: 'ok',
+      removed: { source },
+      version: { id: version.id, name: version.name || version.id },
+      ...(alias && { alias, testUrl }),
+      ...(!existingStagingVersion && {
+        next: [
+          {
+            command: getCommandName('redirects publish'),
+            when: 'To promote this version to production',
+          },
+        ],
+      }),
+      ...(existingStagingVersion && {
+        hint: `Review staged changes with ${getCommandName('redirects list --staging')} before promoting.`,
+      }),
+    };
+    client.stdout.write(`${JSON.stringify(jsonOutput, null, 2)}\n`);
+    return 0;
+  }
+
   output.log(
     `${chalk.cyan('✓')} Redirect removed ${chalk.gray(removeStamp())}`
   );
@@ -105,7 +133,7 @@ export default async function remove(client: Client, argv: string[]) {
   const versionName = version.name || version.id;
   output.print(`  ${chalk.bold('New staging version:')} ${versionName}\n\n`);
 
-  if (!existingStagingVersion && !client.nonInteractive) {
+  if (!existingStagingVersion) {
     const shouldPromote = await client.input.confirm(
       'This is the only staged change. Do you want to promote it to production now?',
       false
@@ -127,10 +155,6 @@ export default async function remove(client: Client, argv: string[]) {
         `${chalk.cyan('✓')} Version promoted to production ${chalk.gray(promoteStamp())}`
       );
     }
-  } else if (!existingStagingVersion && client.nonInteractive) {
-    output.print(
-      `  Run ${chalk.cyan('vercel redirects publish')} to promote this version to production.\n\n`
-    );
   } else {
     output.warn(
       `There are other staged changes. Review them with ${chalk.cyan('vercel redirects list --staging')} before promoting to production.`
