@@ -364,6 +364,36 @@ describe('redirects upload', () => {
 
       await expect(exitCodePromise).resolves.toEqual(1);
     });
+
+    it('should output action_required with <file> placeholder when no file in non-interactive mode', async () => {
+      client.nonInteractive = true;
+      const logSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => undefined as unknown as void);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('exit');
+      }) as () => never);
+
+      client.setArgv(
+        'redirects',
+        'upload',
+        '--cwd=/tmp/project',
+        '--non-interactive'
+      );
+      await expect(redirects(client)).rejects.toThrow('exit');
+
+      const payload = JSON.parse(logSpy.mock.calls[0][0] as string);
+      expect(payload.status).toBe('action_required');
+      expect(payload.reason).toBe('missing_arguments');
+      expect(payload.message).toContain('File path is required');
+      expect(payload.next[0].command).toContain('redirects upload <file>');
+      expect(payload.next[0].command).toContain('--cwd=/tmp/project');
+      expect(payload.next[0].command).toContain('--yes');
+
+      logSpy.mockRestore();
+      exitSpy.mockRestore();
+      client.nonInteractive = false;
+    });
   });
 
   describe('API error handling', () => {
@@ -460,7 +490,8 @@ describe('redirects upload', () => {
       expect(json.status).toEqual('ok');
       expect(json.version).toBeDefined();
       expect(json.next).toBeDefined();
-      expect(json.next[0].command).toContain('redirects publish');
+      expect(json.next[0].command).toContain('redirects promote');
+      expect(json.next[0].command).toContain('version-1');
 
       client.nonInteractive = false;
     });

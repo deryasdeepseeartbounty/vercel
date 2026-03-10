@@ -1,7 +1,11 @@
 import chalk from 'chalk';
 import type Client from '../../util/client';
 import output from '../../output-manager';
-import { outputActionRequired } from '../../util/agent-output';
+import {
+  outputActionRequired,
+  outputAgentError,
+  buildCommandWithYes,
+} from '../../util/agent-output';
 import { removeSubcommand } from './command';
 import {
   parseSubcommandArgs,
@@ -9,7 +13,7 @@ import {
   validateRequiredArgs,
   confirmAction,
 } from './shared';
-import { getCommandName } from '../../util/pkg-name';
+import { getCommandNamePlain } from '../../util/pkg-name';
 import deleteRedirects from '../../util/redirects/delete-redirects';
 import getRedirects from '../../util/redirects/get-redirects';
 import getRedirectVersions from '../../util/redirects/get-redirect-versions';
@@ -22,6 +26,29 @@ export default async function remove(client: Client, argv: string[]) {
 
   const error = validateRequiredArgs(parsed.args, ['source']);
   if (error) {
+    if (client.nonInteractive) {
+      const fullArgs = client.argv.slice(2);
+      const removeIdx = fullArgs.indexOf('remove');
+      const afterRemove = removeIdx >= 0 ? fullArgs.slice(removeIdx + 1) : [];
+      const flagParts = afterRemove.filter(a => a.startsWith('-'));
+      if (!flagParts.some(a => a === '--yes' || a === '-y')) {
+        flagParts.push('--yes');
+      }
+      const cmd = getCommandNamePlain(
+        `redirects remove <source> ${flagParts.join(' ')}`.trim()
+      );
+      outputActionRequired(
+        client,
+        {
+          status: 'action_required',
+          reason: 'missing_arguments',
+          action: 'missing_arguments',
+          message: `${error} Run: ${cmd}`,
+          next: [{ command: cmd, when: 'to remove a redirect' }],
+        },
+        1
+      );
+    }
     output.error(error);
     return 1;
   }
@@ -42,6 +69,25 @@ export default async function remove(client: Client, argv: string[]) {
   const redirectToRemove = redirects.find(r => r.source === source);
 
   if (!redirectToRemove) {
+    if (client.nonInteractive) {
+      const fullArgs = client.argv.slice(2);
+      const removeIdx = fullArgs.indexOf('remove');
+      const afterRemove = removeIdx >= 0 ? fullArgs.slice(removeIdx + 1) : [];
+      const flagParts = afterRemove.filter(a => a.startsWith('-'));
+      const listCmd = getCommandNamePlain(
+        `redirects list ${flagParts.join(' ')}`.trim()
+      );
+      outputAgentError(
+        client,
+        {
+          status: 'error',
+          reason: 'redirect_not_found',
+          message: `Redirect with source "${source}" not found. Run ${listCmd} to see available redirects.`,
+          next: [{ command: listCmd }],
+        },
+        1
+      );
+    }
     output.error(
       `Redirect with source "${source}" not found. Run ${chalk.cyan(
         'vercel redirects list'
@@ -51,7 +97,7 @@ export default async function remove(client: Client, argv: string[]) {
   }
 
   if (client.nonInteractive && !parsed.flags['--yes']) {
-    const cmd = getCommandName(`redirects remove ${source} --yes`);
+    const cmd = buildCommandWithYes(client.argv);
     outputActionRequired(
       client,
       {
@@ -103,6 +149,17 @@ export default async function remove(client: Client, argv: string[]) {
         ? `https://${alias}${source}`
         : `https://${alias}`
       : undefined;
+    const fullArgs = client.argv.slice(2);
+    const removeIdx = fullArgs.indexOf('remove');
+    const afterRemove = removeIdx >= 0 ? fullArgs.slice(removeIdx + 1) : [];
+    const flagParts = afterRemove.filter(a => a.startsWith('-'));
+    const promoteFlagParts = [...flagParts];
+    if (!promoteFlagParts.some(a => a === '--yes' || a === '-y')) {
+      promoteFlagParts.push('--yes');
+    }
+    const promoteCmd = getCommandNamePlain(
+      `redirects promote ${version.id} ${promoteFlagParts.join(' ')}`.trim()
+    );
     const jsonOutput: Record<string, unknown> = {
       status: 'ok',
       removed: { source },
@@ -111,13 +168,13 @@ export default async function remove(client: Client, argv: string[]) {
       ...(!existingStagingVersion && {
         next: [
           {
-            command: getCommandName('redirects publish'),
-            when: 'To promote this version to production',
+            command: promoteCmd,
+            when: 'To promote this staging version to production',
           },
         ],
       }),
       ...(existingStagingVersion && {
-        hint: `Review staged changes with ${getCommandName('redirects list --staging')} before promoting.`,
+        hint: `Review staged changes with ${getCommandNamePlain('redirects list --staging')} before promoting.`,
       }),
     };
     client.stdout.write(`${JSON.stringify(jsonOutput, null, 2)}\n`);

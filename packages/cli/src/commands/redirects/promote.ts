@@ -1,6 +1,10 @@
 import chalk from 'chalk';
 import type Client from '../../util/client';
 import output from '../../output-manager';
+import {
+  outputActionRequired,
+  buildCommandWithYes,
+} from '../../util/agent-output';
 import { promoteSubcommand } from './command';
 import {
   parseSubcommandArgs,
@@ -103,6 +107,22 @@ export default async function promote(client: Client, argv: string[]) {
     output.print(
       `\n${chalk.gray('No changes detected from current production version.')}\n\n`
     );
+  }
+
+  if (client.nonInteractive && !parsed.flags['--yes']) {
+    const cmd = buildCommandWithYes(client.argv);
+    outputActionRequired(
+      client,
+      {
+        status: 'action_required',
+        reason: 'confirmation_required',
+        action: 'confirmation_required',
+        message: `In non-interactive mode use --yes to confirm promote. Run: ${cmd}`,
+        next: [{ command: cmd, when: 'to confirm promote to production' }],
+      },
+      1
+    );
+    return 1;
   }
 
   const confirmed = await confirmAction(

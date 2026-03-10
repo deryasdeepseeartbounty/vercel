@@ -550,7 +550,20 @@ describe('redirects add', () => {
         preserveQueryParams: false,
       });
       expect(json.next).toBeDefined();
-      expect(json.next[0].command).toContain('redirects publish');
+      expect(json.stagingOnly).toBe(true);
+      expect(json.inProduction).toBe(false);
+      expect(json.message).toContain('staging');
+      expect(json.message).toContain('production');
+      const nextCommands = json.next.map((n: { command: string }) => n.command);
+      expect(
+        nextCommands.some((c: string) => c.includes('list --staging'))
+      ).toBe(true);
+      expect(nextCommands.some((c: string) => c.includes('promote'))).toBe(
+        true
+      );
+      expect(nextCommands.some((c: string) => c.includes('version-1'))).toBe(
+        true
+      );
 
       client.nonInteractive = false;
     });

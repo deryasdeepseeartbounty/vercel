@@ -3,7 +3,7 @@ import { parseArguments } from '../../util/get-args';
 import { getFlagsSpecification } from '../../util/get-flags-specification';
 import { printError } from '../../util/error';
 import { getLinkedProject } from '../../util/projects/link';
-import { getCommandName } from '../../util/pkg-name';
+import { getCommandName, getCommandNamePlain } from '../../util/pkg-name';
 import output from '../../output-manager';
 import { outputAgentError } from '../../util/agent-output';
 import type { Command } from '../help';
@@ -50,7 +50,7 @@ export async function ensureProjectLink(client: Client) {
     return link.exitCode;
   } else if (link.status === 'not_linked') {
     if (client.nonInteractive) {
-      const linkCmd = getCommandName('link');
+      const linkCmd = getCommandNamePlain('link');
       outputAgentError(
         client,
         {

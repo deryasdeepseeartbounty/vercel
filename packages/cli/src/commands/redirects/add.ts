@@ -4,7 +4,7 @@ import output from '../../output-manager';
 import { outputActionRequired } from '../../util/agent-output';
 import { addSubcommand } from './command';
 import { parseSubcommandArgs, ensureProjectLink, isValidUrl } from './shared';
-import { getCommandName } from '../../util/pkg-name';
+import { getCommandNamePlain } from '../../util/pkg-name';
 import putRedirects from '../../util/redirects/put-redirects';
 import updateRedirectVersion from '../../util/redirects/update-redirect-version';
 import getRedirectVersions from '../../util/redirects/get-redirect-versions';
@@ -30,8 +30,18 @@ export default async function add(client: Client, argv: string[]) {
   const skipPrompts = flags['--yes'] || client.nonInteractive;
 
   if (client.nonInteractive && (!args[0] || !args[1])) {
-    const cmd = getCommandName(
-      'redirects add <source> <destination> [--status=307] --yes'
+    const sourcePart = args[0] || '<source>';
+    const destPart =
+      args[1] !== undefined && args[1] !== '' ? args[1] : '<destination>';
+    const fullArgs = client.argv.slice(2);
+    const addIdx = fullArgs.indexOf('add');
+    const afterAdd = addIdx >= 0 ? fullArgs.slice(addIdx + 1) : [];
+    const flagParts = afterAdd.filter(a => a.startsWith('-'));
+    if (!flagParts.some(a => a === '--yes' || a === '-y')) {
+      flagParts.push('--yes');
+    }
+    const cmd = getCommandNamePlain(
+      `redirects add ${sourcePart} ${destPart} ${flagParts.join(' ')}`.trim()
     );
     outputActionRequired(
       client,
@@ -225,6 +235,21 @@ export default async function add(client: Client, argv: string[]) {
         ? `https://${alias}${source}`
         : `https://${alias}`
       : undefined;
+    const fullArgs = client.argv.slice(2);
+    const addIdx = fullArgs.indexOf('add');
+    const afterAdd = addIdx >= 0 ? fullArgs.slice(addIdx + 1) : [];
+    const flagParts = afterAdd.filter(a => a.startsWith('-'));
+    const flagsSuffix = flagParts.length > 0 ? ` ${flagParts.join(' ')}` : '';
+    const listStagingCmd = getCommandNamePlain(
+      `redirects list --staging${flagsSuffix}`.trim()
+    );
+    const promoteFlagParts = [...flagParts];
+    if (!promoteFlagParts.some(a => a === '--yes' || a === '-y')) {
+      promoteFlagParts.push('--yes');
+    }
+    const promoteCmd = getCommandNamePlain(
+      `redirects promote ${version.id} ${promoteFlagParts.join(' ')}`.trim()
+    );
     const jsonOutput: Record<string, unknown> = {
       status: 'ok',
       redirect: {
@@ -236,17 +261,23 @@ export default async function add(client: Client, argv: string[]) {
       },
       version: { id: version.id, name: version.name || version.id },
       ...(alias && { alias, testUrl }),
-      ...(!existingStagingVersion && {
-        next: [
-          {
-            command: getCommandName('redirects publish'),
-            when: 'To promote this version to production',
-          },
-        ],
-      }),
-      ...(existingStagingVersion && {
-        hint: `Review staged changes with ${getCommandName('redirects list --staging')} before promoting.`,
-      }),
+      /** Redirect exists only in staging until promote; production list stays unchanged. */
+      stagingOnly: true,
+      inProduction: false,
+      message:
+        'Redirect was added to a staging version only—not live in production yet. ' +
+        '`vercel redirects list` (without --staging) shows production redirects only, so you may see 0 until you promote. ' +
+        `Use ${listStagingCmd} to see staged redirects including this one, then ${promoteCmd} to promote this staging version to production.`,
+      next: [
+        {
+          command: listStagingCmd,
+          when: 'To list staged redirects (includes this redirect)',
+        },
+        {
+          command: promoteCmd,
+          when: 'To promote this staging version to production',
+        },
+      ],
     };
     client.stdout.write(`${JSON.stringify(jsonOutput, null, 2)}\n`);
     return 0;

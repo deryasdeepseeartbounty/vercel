@@ -4,10 +4,13 @@ import chalk from 'chalk';
 import FormData from 'form-data';
 import type Client from '../../util/client';
 import output from '../../output-manager';
-import { outputActionRequired } from '../../util/agent-output';
+import {
+  outputActionRequired,
+  buildCommandWithYes,
+} from '../../util/agent-output';
 import { uploadSubcommand } from './command';
 import { parseSubcommandArgs, ensureProjectLink } from './shared';
-import { getCommandName } from '../../util/pkg-name';
+import { getCommandNamePlain } from '../../util/pkg-name';
 import stamp from '../../util/output/stamp';
 import getRedirectVersions from '../../util/redirects/get-redirect-versions';
 import updateRedirectVersion from '../../util/redirects/update-redirect-version';
@@ -47,10 +50,43 @@ export default async function upload(client: Client, argv: string[]) {
   const { args, flags } = parsed;
   const skipPrompts = flags['--yes'] || false;
 
+  const filePath = args[0];
+
+  if (!filePath) {
+    if (client.nonInteractive) {
+      const fullArgs = client.argv.slice(2);
+      const uploadIdx = fullArgs.indexOf('upload');
+      const afterUpload = uploadIdx >= 0 ? fullArgs.slice(uploadIdx + 1) : [];
+      const flagParts = afterUpload.filter(a => a.startsWith('-'));
+      if (!flagParts.some(a => a === '--yes' || a === '-y')) {
+        flagParts.push('--yes');
+      }
+      const cmd = getCommandNamePlain(
+        `redirects upload <file> ${flagParts.join(' ')}`.trim()
+      );
+      outputActionRequired(
+        client,
+        {
+          status: 'action_required',
+          reason: 'missing_arguments',
+          action: 'missing_arguments',
+          message: `File path is required. Run: ${cmd}`,
+          next: [
+            {
+              command: cmd,
+              when: 'to upload redirects from a CSV or JSON file',
+            },
+          ],
+        },
+        1
+      );
+    }
+    output.error('File path is required. Use: vercel redirects upload <file>');
+    return 1;
+  }
+
   if (client.nonInteractive && !skipPrompts) {
-    const cmd = args[0]
-      ? getCommandName(`redirects upload ${args[0]} --yes`)
-      : getCommandName('redirects upload <file> --yes');
+    const cmd = buildCommandWithYes(client.argv);
     outputActionRequired(
       client,
       {
@@ -66,13 +102,6 @@ export default async function upload(client: Client, argv: string[]) {
   }
 
   const overwrite = flags['--overwrite'] || false;
-
-  const filePath = args[0];
-
-  if (!filePath) {
-    output.error('File path is required. Use: vercel redirects upload <file>');
-    return 1;
-  }
 
   const fileValidation = validateUploadFile(filePath);
   if (!fileValidation.valid) {
@@ -197,6 +226,17 @@ export default async function upload(client: Client, argv: string[]) {
 
     if (client.nonInteractive) {
       output.stopSpinner();
+      const fullArgs = client.argv.slice(2);
+      const uploadIdx = fullArgs.indexOf('upload');
+      const afterUpload = uploadIdx >= 0 ? fullArgs.slice(uploadIdx + 1) : [];
+      const flagParts = afterUpload.filter(a => a.startsWith('-'));
+      const promoteFlagParts = [...flagParts];
+      if (!promoteFlagParts.some(a => a === '--yes' || a === '-y')) {
+        promoteFlagParts.push('--yes');
+      }
+      const promoteCmd = getCommandNamePlain(
+        `redirects promote ${result.version.id} ${promoteFlagParts.join(' ')}`.trim()
+      );
       const jsonOutput: Record<string, unknown> = {
         status: 'ok',
         version: {
@@ -213,13 +253,13 @@ export default async function upload(client: Client, argv: string[]) {
         ...(!existingStagingVersion && {
           next: [
             {
-              command: getCommandName('redirects publish'),
-              when: 'To promote this version to production',
+              command: promoteCmd,
+              when: 'To promote this staging version to production',
             },
           ],
         }),
         ...(existingStagingVersion && {
-          hint: `Review staged changes with ${getCommandName('redirects list --staging')} before promoting.`,
+          hint: `Review staged changes with ${getCommandNamePlain('redirects list --staging')} before promoting.`,
         }),
       };
       client.stdout.write(`${JSON.stringify(jsonOutput, null, 2)}\n`);
@@ -352,7 +392,7 @@ export default async function upload(client: Client, argv: string[]) {
       }
     } else if (!existingStagingVersion && client.nonInteractive) {
       output.print(
-        `  Run ${chalk.cyan('vercel redirects publish')} to promote this version to production.\n\n`
+        `  Run ${chalk.cyan(`vercel redirects promote ${result.version.id} --yes`)} to promote this staging version to production.\n\n`
       );
     }
 

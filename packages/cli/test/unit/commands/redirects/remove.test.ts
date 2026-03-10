@@ -149,6 +149,40 @@ describe('redirects remove', () => {
       await exitCodePromise;
     });
 
+    it('should output error JSON when redirect not found in non-interactive mode', async () => {
+      mockGetVersions();
+      mockGetRedirects({ redirects: [] });
+
+      client.nonInteractive = true;
+      const logSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => undefined as unknown as void);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('exit');
+      }) as () => never);
+
+      client.setArgv(
+        'redirects',
+        'remove',
+        '/nonexistent',
+        '--cwd=/tmp/project',
+        '--non-interactive'
+      );
+      await expect(redirects(client)).rejects.toThrow('exit');
+
+      const payload = JSON.parse(logSpy.mock.calls[0][0] as string);
+      expect(payload.status).toBe('error');
+      expect(payload.reason).toBe('redirect_not_found');
+      expect(payload.message).toContain('/nonexistent');
+      expect(payload.message).toContain('not found');
+      expect(payload.next[0].command).toContain('redirects list');
+      expect(payload.next[0].command).toContain('--cwd=/tmp/project');
+
+      logSpy.mockRestore();
+      exitSpy.mockRestore();
+      client.nonInteractive = false;
+    });
+
     it('should error when no source provided', async () => {
       client.setArgv('redirects', 'remove');
       const exitCodePromise = redirects(client);
@@ -160,6 +194,37 @@ describe('redirects remove', () => {
   });
 
   describe('client.nonInteractive', () => {
+    it('should output action_required JSON when source missing in non-interactive mode with flags preserved', async () => {
+      client.nonInteractive = true;
+      const logSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => undefined as unknown as void);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('exit');
+      }) as () => never);
+
+      client.setArgv(
+        'redirects',
+        'remove',
+        '--cwd=/tmp/project',
+        '--non-interactive'
+      );
+      await expect(redirects(client)).rejects.toThrow('exit');
+
+      const payload = JSON.parse(logSpy.mock.calls[0][0] as string);
+      expect(payload.status).toBe('action_required');
+      expect(payload.reason).toBe('missing_arguments');
+      expect(payload.message).toContain('Missing required argument: source');
+      expect(payload.next[0].command).toContain('redirects remove <source>');
+      expect(payload.next[0].command).toContain('--cwd=/tmp/project');
+      expect(payload.next[0].command).toContain('--non-interactive');
+      expect(payload.next[0].command).toContain('--yes');
+
+      logSpy.mockRestore();
+      exitSpy.mockRestore();
+      client.nonInteractive = false;
+    });
+
     it('should output action_required JSON with next command when --yes not provided in non-interactive mode', async () => {
       mockGetVersions();
       mockGetRedirects();
@@ -205,7 +270,8 @@ describe('redirects remove', () => {
       expect(json.status).toEqual('ok');
       expect(json.removed).toEqual({ source: '/old-path' });
       expect(json.next).toBeDefined();
-      expect(json.next[0].command).toContain('redirects publish');
+      expect(json.next[0].command).toContain('redirects promote');
+      expect(json.next[0].command).toContain('version-1');
 
       client.nonInteractive = false;
     });
