@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import type Client from '../../util/client';
 import output from '../../output-manager';
+import { outputActionRequired } from '../../util/agent-output';
 import { removeSubcommand } from './command';
 import {
   parseSubcommandArgs,
@@ -50,8 +51,17 @@ export default async function remove(client: Client, argv: string[]) {
   }
 
   if (client.nonInteractive && !parsed.flags['--yes']) {
-    output.error(
-      `In non-interactive mode use --yes to confirm removal. Use: ${getCommandName('redirects remove <source> --yes')}`
+    const cmd = getCommandName(`redirects remove ${source} --yes`);
+    outputActionRequired(
+      client,
+      {
+        status: 'action_required',
+        reason: 'confirmation_required',
+        action: 'confirmation_required',
+        message: `In non-interactive mode use --yes to confirm removal. Run: ${cmd}`,
+        next: [{ command: cmd, when: 'to confirm removal' }],
+      },
+      1
     );
     return 1;
   }

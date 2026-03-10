@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { client } from '../../../mocks/client';
 import redirects from '../../../../src/commands/redirects';
 import { useUser } from '../../../mocks/user';
@@ -160,19 +160,33 @@ describe('redirects remove', () => {
   });
 
   describe('client.nonInteractive', () => {
-    it('should error when --yes not provided in non-interactive mode', async () => {
+    it('should output action_required JSON with next command when --yes not provided in non-interactive mode', async () => {
       mockGetVersions();
       mockGetRedirects();
 
       client.nonInteractive = true;
+      const logSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => undefined as unknown as void);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('exit');
+      }) as () => never);
+
       client.setArgv('redirects', 'remove', '/old-path');
-      const exitCodePromise = redirects(client);
+      await expect(redirects(client)).rejects.toThrow('exit');
 
-      await expect(client.stderr).toOutput(
-        'In non-interactive mode use --yes to confirm removal'
-      );
-      await expect(exitCodePromise).resolves.toEqual(1);
+      const payload = JSON.parse(logSpy.mock.calls[0][0] as string);
+      expect(payload.status).toBe('action_required');
+      expect(payload.reason).toBe('confirmation_required');
+      expect(payload.message).toContain('--yes to confirm removal');
+      expect(Array.isArray(payload.next)).toBe(true);
+      expect(payload.next[0].command).toContain('redirects remove');
+      expect(payload.next[0].command).toContain('/old-path');
+      expect(payload.next[0].command).toContain('--yes');
+      expect(payload.next[0].when).toBe('to confirm removal');
 
+      logSpy.mockRestore();
+      exitSpy.mockRestore();
       client.nonInteractive = false;
     });
 

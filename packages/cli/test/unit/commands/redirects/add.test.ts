@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { client } from '../../../mocks/client';
 import redirects from '../../../../src/commands/redirects';
 import { useUser } from '../../../mocks/user';
@@ -478,33 +478,55 @@ describe('redirects add', () => {
   });
 
   describe('client.nonInteractive', () => {
-    it('should error when source or destination missing in non-interactive mode', async () => {
+    it('should output action_required JSON with next command when source or destination missing in non-interactive mode', async () => {
       mockGetVersions();
       client.nonInteractive = true;
 
+      const logSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => undefined as unknown as void);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('exit');
+      }) as () => never);
+
       client.setArgv('redirects', 'add');
-      const exitCodePromise = redirects(client);
+      await expect(redirects(client)).rejects.toThrow('exit');
 
-      await expect(client.stderr).toOutput(
-        'In non-interactive mode source and destination are required'
-      );
-      await expect(exitCodePromise).resolves.toEqual(1);
+      expect(logSpy).toHaveBeenCalled();
+      const payload = JSON.parse(logSpy.mock.calls[0][0] as string);
+      expect(payload.status).toBe('action_required');
+      expect(payload.reason).toBe('missing_arguments');
+      expect(payload.message).toContain('source and destination are required');
+      expect(Array.isArray(payload.next)).toBe(true);
+      expect(payload.next[0].command).toContain('redirects add');
+      expect(payload.next[0].command).toContain('--yes');
+      expect(payload.next[0].when).toBe('to add a redirect');
 
+      logSpy.mockRestore();
+      exitSpy.mockRestore();
       client.nonInteractive = false;
     });
 
-    it('should error when only source provided in non-interactive mode', async () => {
+    it('should output action_required JSON when only source provided in non-interactive mode', async () => {
       mockGetVersions();
       client.nonInteractive = true;
 
+      const logSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => undefined as unknown as void);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('exit');
+      }) as () => never);
+
       client.setArgv('redirects', 'add', '/old-path');
-      const exitCodePromise = redirects(client);
+      await expect(redirects(client)).rejects.toThrow('exit');
 
-      await expect(client.stderr).toOutput(
-        'In non-interactive mode source and destination are required'
-      );
-      await expect(exitCodePromise).resolves.toEqual(1);
+      const payload = JSON.parse(logSpy.mock.calls[0][0] as string);
+      expect(payload.status).toBe('action_required');
+      expect(payload.next[0].command).toContain('redirects add');
 
+      logSpy.mockRestore();
+      exitSpy.mockRestore();
       client.nonInteractive = false;
     });
 

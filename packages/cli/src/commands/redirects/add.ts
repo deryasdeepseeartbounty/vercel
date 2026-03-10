@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import type Client from '../../util/client';
 import output from '../../output-manager';
+import { outputActionRequired } from '../../util/agent-output';
 import { addSubcommand } from './command';
 import { parseSubcommandArgs, ensureProjectLink, isValidUrl } from './shared';
 import { getCommandName } from '../../util/pkg-name';
@@ -29,8 +30,19 @@ export default async function add(client: Client, argv: string[]) {
   const skipPrompts = flags['--yes'] || client.nonInteractive;
 
   if (client.nonInteractive && (!args[0] || !args[1])) {
-    output.error(
-      `In non-interactive mode source and destination are required. Use: ${getCommandName('redirects add <source> <destination> [--status=307] --yes')}`
+    const cmd = getCommandName(
+      'redirects add <source> <destination> [--status=307] --yes'
+    );
+    outputActionRequired(
+      client,
+      {
+        status: 'action_required',
+        reason: 'missing_arguments',
+        action: 'missing_arguments',
+        message: `In non-interactive mode source and destination are required. Run: ${cmd}`,
+        next: [{ command: cmd, when: 'to add a redirect' }],
+      },
+      1
     );
     return 1;
   }

@@ -5,6 +5,7 @@ import { printError } from '../../util/error';
 import { getLinkedProject } from '../../util/projects/link';
 import { getCommandName } from '../../util/pkg-name';
 import output from '../../output-manager';
+import { outputAgentError } from '../../util/agent-output';
 import type { Command } from '../help';
 
 export interface ParsedSubcommand {
@@ -48,6 +49,19 @@ export async function ensureProjectLink(client: Client) {
   if (link.status === 'error') {
     return link.exitCode;
   } else if (link.status === 'not_linked') {
+    if (client.nonInteractive) {
+      const linkCmd = getCommandName('link');
+      outputAgentError(
+        client,
+        {
+          status: 'error',
+          reason: 'not_linked',
+          message: `Your codebase isn't linked to a project on Vercel. Run ${linkCmd} to begin.`,
+          next: [{ command: linkCmd }],
+        },
+        1
+      );
+    }
     output.error(
       `Your codebase isn't linked to a project on Vercel. Run ${getCommandName('link')} to begin.`
     );

@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import FormData from 'form-data';
 import type Client from '../../util/client';
 import output from '../../output-manager';
+import { outputActionRequired } from '../../util/agent-output';
 import { uploadSubcommand } from './command';
 import { parseSubcommandArgs, ensureProjectLink } from './shared';
 import { getCommandName } from '../../util/pkg-name';
@@ -47,8 +48,19 @@ export default async function upload(client: Client, argv: string[]) {
   const skipPrompts = flags['--yes'] || false;
 
   if (client.nonInteractive && !skipPrompts) {
-    output.error(
-      `In non-interactive mode use --yes to confirm upload. Use: ${getCommandName('redirects upload <file> --yes')}`
+    const cmd = args[0]
+      ? getCommandName(`redirects upload ${args[0]} --yes`)
+      : getCommandName('redirects upload <file> --yes');
+    outputActionRequired(
+      client,
+      {
+        status: 'action_required',
+        reason: 'confirmation_required',
+        action: 'confirmation_required',
+        message: `In non-interactive mode use --yes to confirm upload. Run: ${cmd}`,
+        next: [{ command: cmd, when: 'to confirm upload' }],
+      },
+      1
     );
     return 1;
   }
