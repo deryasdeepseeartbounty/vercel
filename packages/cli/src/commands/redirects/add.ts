@@ -3,7 +3,14 @@ import type Client from '../../util/client';
 import output from '../../output-manager';
 import { outputActionRequired } from '../../util/agent-output';
 import { addSubcommand } from './command';
-import { parseSubcommandArgs, ensureProjectLink, isValidUrl } from './shared';
+import {
+  parseSubcommandArgs,
+  ensureProjectLink,
+  isValidUrl,
+  getArgsAfterRedirectsSubcommand,
+  getRedirectGlobalFlagsOnly,
+  getRedirectPromoteSuggestionFlags,
+} from './shared';
 import { getCommandNamePlain } from '../../util/pkg-name';
 import putRedirects from '../../util/redirects/put-redirects';
 import updateRedirectVersion from '../../util/redirects/update-redirect-version';
@@ -236,17 +243,16 @@ export default async function add(client: Client, argv: string[]) {
         : `https://${alias}`
       : undefined;
     const fullArgs = client.argv.slice(2);
-    const addIdx = fullArgs.indexOf('add');
-    const afterAdd = addIdx >= 0 ? fullArgs.slice(addIdx + 1) : [];
-    const flagParts = afterAdd.filter(a => a.startsWith('-'));
-    const flagsSuffix = flagParts.length > 0 ? ` ${flagParts.join(' ')}` : '';
+    const afterAdd = getArgsAfterRedirectsSubcommand(fullArgs, 'add');
+    // Only forward global flags into list/promote suggestions; add-only flags
+    // (--status, --name, etc.) would break parsing on those subcommands.
+    const globalFlags = getRedirectGlobalFlagsOnly(afterAdd);
+    const flagsSuffix =
+      globalFlags.length > 0 ? ` ${globalFlags.join(' ')}` : '';
     const listStagingCmd = getCommandNamePlain(
       `redirects list --staging${flagsSuffix}`.trim()
     );
-    const promoteFlagParts = [...flagParts];
-    if (!promoteFlagParts.some(a => a === '--yes' || a === '-y')) {
-      promoteFlagParts.push('--yes');
-    }
+    const promoteFlagParts = getRedirectPromoteSuggestionFlags(afterAdd);
     const promoteCmd = getCommandNamePlain(
       `redirects promote ${version.id} ${promoteFlagParts.join(' ')}`.trim()
     );

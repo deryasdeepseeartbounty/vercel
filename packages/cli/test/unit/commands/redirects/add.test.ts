@@ -567,6 +567,46 @@ describe('redirects add', () => {
 
       client.nonInteractive = false;
     });
+
+    it('should not forward add-only flags into list/promote next commands', async () => {
+      mockGetVersions();
+      mockPutRedirects();
+
+      client.nonInteractive = true;
+      client.setArgv(
+        'redirects',
+        'add',
+        '/old-path',
+        '/new-path',
+        '--yes',
+        '--status',
+        '301',
+        '--cwd',
+        '/tmp/proj'
+      );
+      const exitCode = await redirects(client);
+      expect(exitCode).toEqual(0);
+
+      const json = JSON.parse(client.stdout.getFullOutput());
+      const nextCommands = json.next.map((n: { command: string }) => n.command);
+      const promoteCmd = nextCommands.find((c: string) =>
+        c.includes('promote')
+      );
+      const listCmd = nextCommands.find((c: string) =>
+        c.includes('list --staging')
+      );
+      expect(promoteCmd).toBeDefined();
+      expect(listCmd).toBeDefined();
+      // --status is add-only; must not appear on promote/list suggestions
+      expect(promoteCmd).not.toContain('--status');
+      expect(listCmd).not.toContain('--status');
+      // global --cwd should still be forwarded
+      expect(promoteCmd).toContain('--cwd');
+      expect(promoteCmd).toContain('/tmp/proj');
+      expect(promoteCmd).toContain('--yes');
+
+      client.nonInteractive = false;
+    });
   });
 });
 

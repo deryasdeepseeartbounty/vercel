@@ -9,7 +9,12 @@ import {
   buildCommandWithYes,
 } from '../../util/agent-output';
 import { uploadSubcommand } from './command';
-import { parseSubcommandArgs, ensureProjectLink } from './shared';
+import {
+  parseSubcommandArgs,
+  ensureProjectLink,
+  getArgsAfterRedirectsSubcommand,
+  getRedirectPromoteSuggestionFlags,
+} from './shared';
 import { getCommandNamePlain } from '../../util/pkg-name';
 import stamp from '../../util/output/stamp';
 import getRedirectVersions from '../../util/redirects/get-redirect-versions';
@@ -226,14 +231,11 @@ export default async function upload(client: Client, argv: string[]) {
 
     if (client.nonInteractive) {
       output.stopSpinner();
-      const fullArgs = client.argv.slice(2);
-      const uploadIdx = fullArgs.indexOf('upload');
-      const afterUpload = uploadIdx >= 0 ? fullArgs.slice(uploadIdx + 1) : [];
-      const flagParts = afterUpload.filter(a => a.startsWith('-'));
-      const promoteFlagParts = [...flagParts];
-      if (!promoteFlagParts.some(a => a === '--yes' || a === '-y')) {
-        promoteFlagParts.push('--yes');
-      }
+      const afterUpload = getArgsAfterRedirectsSubcommand(
+        client.argv.slice(2),
+        'upload'
+      );
+      const promoteFlagParts = getRedirectPromoteSuggestionFlags(afterUpload);
       const promoteCmd = getCommandNamePlain(
         `redirects promote ${result.version.id} ${promoteFlagParts.join(' ')}`.trim()
       );

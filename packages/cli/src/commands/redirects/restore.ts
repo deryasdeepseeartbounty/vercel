@@ -12,6 +12,9 @@ import {
   ensureProjectLink,
   validateRequiredArgs,
   confirmAction,
+  getArgsAfterRedirectsSubcommand,
+  getRedirectGlobalFlagsOnly,
+  getRedirectPromoteSuggestionFlags,
 } from './shared';
 import { getCommandNamePlain } from '../../util/pkg-name';
 import getRedirectVersions from '../../util/redirects/get-redirect-versions';
@@ -26,18 +29,15 @@ export default async function restore(client: Client, argv: string[]) {
   const error = validateRequiredArgs(parsed.args, ['version-id']);
   if (error) {
     if (client.nonInteractive) {
-      const fullArgs = client.argv.slice(2);
-      const restoreIdx = fullArgs.indexOf('restore');
-      const afterRestore =
-        restoreIdx >= 0 ? fullArgs.slice(restoreIdx + 1) : [];
-      const flagParts = afterRestore.filter(a => a.startsWith('-'));
-      const listVersionsCmd = getCommandNamePlain(
-        `redirects list-versions ${flagParts.join(' ')}`.trim()
+      const afterRestore = getArgsAfterRedirectsSubcommand(
+        client.argv.slice(2),
+        'restore'
       );
-      const restoreFlagParts = [...flagParts];
-      if (!restoreFlagParts.some(a => a === '--yes' || a === '-y')) {
-        restoreFlagParts.push('--yes');
-      }
+      const globalFlags = getRedirectGlobalFlagsOnly(afterRestore);
+      const listVersionsCmd = getCommandNamePlain(
+        `redirects list-versions ${globalFlags.join(' ')}`.trim()
+      );
+      const restoreFlagParts = getRedirectPromoteSuggestionFlags(afterRestore);
       const restoreCmd = getCommandNamePlain(
         `redirects restore <version-id> ${restoreFlagParts.join(' ')}`.trim()
       );
@@ -84,13 +84,13 @@ export default async function restore(client: Client, argv: string[]) {
 
   if (!version) {
     if (client.nonInteractive) {
-      const fullArgs = client.argv.slice(2);
-      const restoreIdx = fullArgs.indexOf('restore');
-      const afterRestore =
-        restoreIdx >= 0 ? fullArgs.slice(restoreIdx + 1) : [];
-      const flagParts = afterRestore.filter(a => a.startsWith('-'));
+      const afterRestore = getArgsAfterRedirectsSubcommand(
+        client.argv.slice(2),
+        'restore'
+      );
+      const globalFlags = getRedirectGlobalFlagsOnly(afterRestore);
       const listCmd = getCommandNamePlain(
-        `redirects list-versions ${flagParts.join(' ')}`.trim()
+        `redirects list-versions ${globalFlags.join(' ')}`.trim()
       );
       outputAgentError(
         client,
@@ -113,13 +113,13 @@ export default async function restore(client: Client, argv: string[]) {
 
   if (version.isLive) {
     if (client.nonInteractive) {
-      const fullArgs = client.argv.slice(2);
-      const restoreIdx = fullArgs.indexOf('restore');
-      const afterRestore =
-        restoreIdx >= 0 ? fullArgs.slice(restoreIdx + 1) : [];
-      const flagParts = afterRestore.filter(a => a.startsWith('-'));
+      const afterRestore = getArgsAfterRedirectsSubcommand(
+        client.argv.slice(2),
+        'restore'
+      );
+      const globalFlags = getRedirectGlobalFlagsOnly(afterRestore);
       const listCmd = getCommandNamePlain(
-        `redirects list-versions ${flagParts.join(' ')}`.trim()
+        `redirects list-versions ${globalFlags.join(' ')}`.trim()
       );
       outputAgentError(
         client,

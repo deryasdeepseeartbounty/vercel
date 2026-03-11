@@ -12,6 +12,9 @@ import {
   ensureProjectLink,
   validateRequiredArgs,
   confirmAction,
+  getArgsAfterRedirectsSubcommand,
+  getRedirectGlobalFlagsOnly,
+  getRedirectPromoteSuggestionFlags,
 } from './shared';
 import { getCommandNamePlain } from '../../util/pkg-name';
 import deleteRedirects from '../../util/redirects/delete-redirects';
@@ -70,12 +73,13 @@ export default async function remove(client: Client, argv: string[]) {
 
   if (!redirectToRemove) {
     if (client.nonInteractive) {
-      const fullArgs = client.argv.slice(2);
-      const removeIdx = fullArgs.indexOf('remove');
-      const afterRemove = removeIdx >= 0 ? fullArgs.slice(removeIdx + 1) : [];
-      const flagParts = afterRemove.filter(a => a.startsWith('-'));
+      const afterRemove = getArgsAfterRedirectsSubcommand(
+        client.argv.slice(2),
+        'remove'
+      );
+      const globalFlags = getRedirectGlobalFlagsOnly(afterRemove);
       const listCmd = getCommandNamePlain(
-        `redirects list ${flagParts.join(' ')}`.trim()
+        `redirects list ${globalFlags.join(' ')}`.trim()
       );
       outputAgentError(
         client,
@@ -149,14 +153,11 @@ export default async function remove(client: Client, argv: string[]) {
         ? `https://${alias}${source}`
         : `https://${alias}`
       : undefined;
-    const fullArgs = client.argv.slice(2);
-    const removeIdx = fullArgs.indexOf('remove');
-    const afterRemove = removeIdx >= 0 ? fullArgs.slice(removeIdx + 1) : [];
-    const flagParts = afterRemove.filter(a => a.startsWith('-'));
-    const promoteFlagParts = [...flagParts];
-    if (!promoteFlagParts.some(a => a === '--yes' || a === '-y')) {
-      promoteFlagParts.push('--yes');
-    }
+    const afterRemove = getArgsAfterRedirectsSubcommand(
+      client.argv.slice(2),
+      'remove'
+    );
+    const promoteFlagParts = getRedirectPromoteSuggestionFlags(afterRemove);
     const promoteCmd = getCommandNamePlain(
       `redirects promote ${version.id} ${promoteFlagParts.join(' ')}`.trim()
     );

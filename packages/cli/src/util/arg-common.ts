@@ -81,6 +81,40 @@ export const globalCommandOptions = [
   { name: 'api', shorthand: null, type: String, deprecated: false },
 ] as const;
 
+/**
+ * Long and short names for global CLI flags (from globalCommandOptions).
+ * Use when building suggested `next` commands so only context flags like
+ * --cwd, --scope, --token are forwarded—never subcommand-specific flags.
+ */
+export const GLOBAL_CLI_FLAG_NAMES: ReadonlySet<string> = (() => {
+  const set = new Set<string>();
+  for (const opt of globalCommandOptions) {
+    set.add(`--${opt.name}`);
+    if (opt.shorthand) {
+      set.add(`-${opt.shorthand}`);
+    }
+  }
+  return set;
+})();
+
+/**
+ * Whether a global CLI flag expects a separate argv token (String type).
+ */
+export function globalCliFlagTakesValue(flagName: string): boolean {
+  const normalized = flagName.includes('=')
+    ? flagName.slice(0, flagName.indexOf('='))
+    : flagName;
+  for (const opt of globalCommandOptions) {
+    if (`--${opt.name}` === normalized) {
+      return opt.type === String;
+    }
+    if (opt.shorthand && `-${opt.shorthand}` === normalized) {
+      return opt.type === String;
+    }
+  }
+  return false;
+}
+
 const GLOBAL_OPTIONS = getFlagsSpecification(globalCommandOptions);
 
 export default () => GLOBAL_OPTIONS;
