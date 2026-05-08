@@ -1,5 +1,13 @@
 # @vercel/express
 
+## 0.1.84
+
+### Patch Changes
+
+- Updated dependencies [ae20217]
+  - @vercel/cervel@0.1.1
+  - @vercel/node@5.7.15
+
 ## 0.1.83
 
 ### Patch Changes

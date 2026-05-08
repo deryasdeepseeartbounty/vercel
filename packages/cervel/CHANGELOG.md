@@ -1,5 +1,13 @@
 # @vercel/cervel
 
+## 0.1.1
+
+### Patch Changes
+
+- ae20217: Upgrade to TypeScript 5.9
+- Updated dependencies [ae20217]
+  - @vercel/backends@0.3.1
+
 ## 0.1.0
 
 ### Minor Changes
