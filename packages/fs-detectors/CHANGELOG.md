@@ -1,5 +1,13 @@
 # @vercel/fs-detectors
 
+## 6.1.2
+
+### Patch Changes
+
+- 1e08c83: [services] error on framework = "services" but no services configured
+- Updated dependencies [c95a7ca]
+  - @vercel/frameworks@3.25.1
+
 ## 6.1.1
 
 ### Patch Changes
